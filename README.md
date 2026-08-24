@@ -1,137 +1,141 @@
-# File Manager Utility
+# Project File Exporter — Utility Tools
 
-A Node.js CLI tool that exports an entire folder (including binary files) into a single portable JSON file — and recreates it anywhere.
+A collection of zero-dependency Node.js CLI tools for transferring project files and git history between machines.
 
-Think of it as a simple file/folder exporter: pack a project into one `.json` file, copy-paste or transfer it, then unpack it back into a full folder structure.
+---
 
-## Why?
+## Tools
 
-- Export a git bare repo, a project folder, or any directory into **one file**
-- Copy-paste friendly — the JSON file can be shared via chat, email, or clipboard
-- Supports **all file types** — text files stored as-is, binary files (PDFs, images, git objects) stored as base64
-- Respects ignore patterns (like `.gitignore` style)
+| Tool | File | Use Case |
+| ---- | ---- | -------- |
+| **Files Copy** | `files_copy.js` | Copy all project files (text + binary) into a single JSON file and recreate them elsewhere |
+| **Git History** | `git-history.js` | Transfer git commits from one repo to another using patches |
 
-## Setup
+---
 
-```bash
-cd project-file-exporter
-npm install
-```
+## How to Use
 
-## Usage
-
-### Commands
+### Files Copy
 
 ```bash
-node start.js <command> <config-file>
+node files_copy.js <command> <config-file>
 ```
 
-| Command | Short | Description |
-|---------|-------|-------------|
-| `init` | `i` | Create a config file (set target folder & ignore patterns) |
-| `read` | `r` | Read all files from target folder into the config file |
-| `create` | `c` | Recreate all files from config into the target folder |
-| `info` | — | Show summary of a config file |
-| `help` | `h` | Show help |
-
-### Examples
+| Command | Description |
+| ------- | ----------- |
+| `init` | Create a config (set target folder + ignore patterns) |
+| `read` | Read all files from target folder into config JSON |
+| `create` | Recreate files from config JSON into target folder |
+| `info` | Show summary |
 
 ```bash
-# Create a config for a project
-node start.js init my-project.json
-
-# Export all files from the target folder into the JSON
-node start.js read my-project.json
-
-# Recreate the folder from the JSON (on another machine, another path, etc.)
-node start.js create my-project.json
-
-# View what's inside a config file
-node start.js info my-project.json
-
-# Interactive mode — prompts for everything
-node start.js
-
-# Interactive mode with a config file
-node start.js my-project.json
+node files_copy.js init project.json
+node files_copy.js read project.json
+# copy project.json to another machine, change target path
+node files_copy.js create project.json
 ```
 
-## Workflow
+### Git History
 
-### Export a folder
-
-```
-node start.js init project.json
-  → Enter target: C:\my-projects\webapp
-  → Enter ignore: **/node_modules, **/dist, .git
-
-node start.js read project.json
-  → Reads all files from C:\my-projects\webapp
-  → Saves everything into project.json
+```bash
+node git-history.js <command> <config-file>
 ```
 
-Now `project.json` contains your entire folder. Copy it anywhere.
+| Command | Description |
+| ------- | ----------- |
+| `init` | Create a config (set repo path + commit selection) |
+| `read` | Export commits from repo into config JSON as patches |
+| `write` | Apply stored patches to repo |
+| `info` | Show summary |
 
-### Import / Recreate
-
+```bash
+node git-history.js init transfer.json
+node git-history.js read transfer.json
+# copy transfer.json to another machine, change repo path
+node git-history.js write transfer.json
 ```
-node start.js create project.json
-  → Recreates all files into the target folder
+
+---
+
+## How It Works
+
+### Files Copy Working
+
+1. **read** — Scans the target folder, reads all files (text as UTF-8, binary as base64), stores them in a single JSON config file.
+2. **create** — Reads file entries from the JSON config and recreates the folder structure + files at the target path.
+
+```text
+┌─────────────┐   read    ┌─────────────┐   create   ┌─────────────┐
+│  Folder A   │  ───────► │ config.json │  ────────►  │  Folder B   │
+└─────────────┘           └─────────────┘             └─────────────┘
 ```
 
-Or edit the `target` path in the JSON first to write to a different location.
+One JSON file carries everything — file paths, content, and encoding info.
 
-## Config File Format
+### Git History Working
+
+1. **read** — Runs `git format-patch` for each commit, stores patch content inside the config JSON.
+2. **write** — Extracts patches from config and applies them to the repo using `git am`.
+
+```text
+┌──────────┐   read    ┌─────────────┐   write   ┌──────────┐
+│  Repo A  │  ───────► │ config.json │  ────────► │  Repo B  │
+└──────────┘           └─────────────┘            └──────────┘
+```
+
+One JSON file carries config + all patch data. Preserves commit messages, authors, and dates.
+
+---
+
+## Examples
+
+### Files Copy — Transfer a project to another machine
+
+```bash
+# On Machine A: create config and read project into JSON
+node files_copy.js init project.json
+# Edit project.json if needed → adjust "target" path, add ignore patterns
+node files_copy.js read project.json
+
+# Copy project.json to Machine B, then:
+# Edit project.json → change "target" to destination path on this machine
+node files_copy.js create project.json
+```
+
+### Git History — Transfer last 10 commits
+
+```bash
+# On Machine A: create config and export commits
+node git-history.js init transfer.json
+# Edit transfer.json if needed → adjust "repo" path, set lastNCommits or commits
+node git-history.js read transfer.json
+
+# Copy transfer.json to Machine B, then:
+# Edit transfer.json → change "repo" to target repo path on this machine
+node git-history.js write transfer.json
+```
+
+### Git History — Transfer specific commits
+
+Create `transfer.json` manually:
 
 ```json
 {
-  "target": "C:/path/to/your/project",
-  "ignore": [
-    "**/node_modules",
-    "**/dist",
-    ".git"
-  ],
-  "files": [
-    {
-      "path": "src/index.js",
-      "encoding": "text",
-      "content": "const app = require('express')();\n..."
-    },
-    {
-      "path": "assets/logo.png",
-      "encoding": "base64",
-      "content": "iVBORw0KGgoAAAANSUhEUg..."
-    }
-  ]
+  "repo": "C:/projects/my-app",
+  "commits": ["a1b2c3d", "d4e5f6a", "b7c8d9e"],
+  "options": { "threeway": true, "keepAuthor": true }
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `target` | The folder to read from / write to |
-| `ignore` | Glob patterns to skip (supports `**`, `*`, `?`) |
-| `files` | Array of all file entries |
-| `files[].path` | Relative path (always linux format `/`) |
-| `files[].encoding` | `text` or `base64` |
-| `files[].content` | File content (raw text or base64 encoded) |
+```bash
+node git-history.js read transfer.json
+# Change "repo" to target repo path
+node git-history.js write transfer.json
+```
 
-## Ignore Patterns
+---
 
-Works like `.gitignore` style patterns:
+## Requirements
 
-| Pattern | Matches |
-|---------|---------|
-| `**/node_modules` | `node_modules` anywhere in the tree |
-| `**/dist` | Any `dist` folder at any depth |
-| `.git` | `.git` folder/file in any segment |
-| `client/node_modules` | Only `client/node_modules` (exact path) |
-| `*.log` | Any `.log` file in any segment |
-
-## Notes
-
-- All paths are stored in **linux format** (forward slashes) regardless of OS
-- You can pass Windows (`C:\foo\bar`) or Linux (`C:/foo/bar`) paths — both work
-- Text files have zero overhead in storage
-- Binary files use base64 encoding (+33% size) to remain copy-paste safe
-- Binary vs text detection is automatic (utf-8 round-trip integrity check)
-- The config JSON file is fully portable — open it, copy it, paste it anywhere
+- **Node.js** — v12+
+- **Git** — required only for git-history.js
