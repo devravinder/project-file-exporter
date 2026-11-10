@@ -1,246 +1,110 @@
-# Project File Exporter — Utility Tools
+# File Transfer
 
-A collection of zero-dependency Node.js CLI tools for transferring project files and git history between machines.
-
----
-
-## Tools
-
-| Tool | File | Use Case |
-| ---- | ---- | -------- |
-| **Files Copy** | `files_copy.js` | Copy all project files (text + binary) into a single JSON file and recreate them elsewhere |
-| **Git History** | `git-history.js` | Transfer git commits from one repo to another using patches |
-| **Git Utility** | `git-utility.js` | Interactive tool to list commits and group commits by change size |
-| **Splitter** | `splitter.js` | Split a text file into size-limited parts (in KB), or combine files back together |
-
----
-
-## How to Use
-
-### Files Copy
+Move a **git repository's history** or a **plain folder** between machines as
+size-limited JSON part files that you can copy and paste by hand.
+Zero dependencies - Node.js and git (git only for the git tools). Developed and tested on Node 26 / git 2.55 on Windows.
 
 ```bash
-node files_copy.js <command> <config-file>
+node file-transfer.js
 ```
-
-| Command | Description |
-| ------- | ----------- |
-| `init` | Create a config (set target folder + ignore patterns) |
-| `read` | Read all files from target folder into config JSON |
-| `create` | Recreate files from config JSON into target folder |
-| `info` | Show summary |
-
-```bash
-node files_copy.js init project.json
-node files_copy.js read project.json
-# copy project.json to another machine, change target path
-node files_copy.js create project.json
-```
-
-### Git History
-
-```bash
-node git-history.js <command> <config-file>
-```
-
-| Command | Description |
-| ------- | ----------- |
-| `init` | Create a config (set repo path + commit selection) |
-| `read` | Export commits from repo into config JSON as patches |
-| `write` | Apply stored patches to repo |
-| `info` | Show summary |
-
-```bash
-node git-history.js init transfer.json
-node git-history.js read transfer.json
-# copy transfer.json to another machine, change repo path
-node git-history.js write transfer.json
-```
-
----
-
-## How It Works
-
-### Files Copy Working
-
-1. **read** — Scans the target folder, reads all files (text as UTF-8, binary as base64), stores them in a single JSON config file.
-2. **create** — Reads file entries from the JSON config and recreates the folder structure + files at the target path.
 
 ```text
-┌─────────────┐   read    ┌─────────────┐   create   ┌─────────────┐
-│  Folder A   │  ───────► │ config.json │  ────────►  │  Folder B   │
-└─────────────┘           └─────────────┘             └─────────────┘
+1) Git repository (commit history)     1) Export   2) Restore   3) List commits   4) Change timestamps
+2) Files (non-git folder)              1) Pack     2) Unpack
 ```
 
-One JSON file carries everything — file paths, content, and encoding info.
+Everything can also be run directly with flags; anything not given is asked.
 
-### Git History Working
+## Typical flow
 
-1. **read** — Runs `git format-patch` for each commit, stores patch content inside the config JSON.
-2. **write** — Extracts patches from config and applies them to the repo using `git am`.
+**Source machine** - `Git → Export`: pick the repo, which commits, the size limit (default 350 KB)
+and an output folder. You get `0001-of-0007.json`, `0002-of-0007.json`, ...
 
-```text
-┌──────────┐   read    ┌─────────────┐   write   ┌──────────┐
-│  Repo A  │  ───────► │ config.json │  ────────► │  Repo B  │
-└──────────┘           └─────────────┘            └──────────┘
-```
-
-One JSON file carries config + all patch data. Preserves commit messages, authors, and dates.
-
----
-
-## Examples
-
-### Files Copy — Transfer a project to another machine
+**Destination machine** - copy the part files over (open each, select all, copy, paste into a new file -
+the file *names* do not matter), then `Git → Restore`: pick the folder with the parts and the
+destination repo. It is created (and `git init`-ed) if it does not exist.
 
 ```bash
-# On Machine A: create config and read project into JSON
-node files_copy.js init project.json
-# Edit project.json if needed → adjust "target" path, add ignore patterns
-node files_copy.js read project.json
-
-# Copy project.json to Machine B, then:
-# Edit project.json → change "target" to destination path on this machine
-node files_copy.js create project.json
+node file-transfer.js git export  --repo C:/src/app --mode all --limit 350 --out parts
+node file-transfer.js git restore --parts parts --dest D:/new/app
 ```
 
-### Git History — Transfer last 10 commits
+Plain folders work the same way:
 
 ```bash
-# On Machine A: create config and export commits
-node git-history.js init transfer.json
-# Edit transfer.json if needed → adjust "repo" path, set lastNCommits or commits
-node git-history.js read transfer.json
-
-# Copy transfer.json to Machine B, then:
-# Edit transfer.json → change "repo" to target repo path on this machine
-node git-history.js write transfer.json
+node file-transfer.js files pack   --src C:/docs --ignore ".git,node_modules" --limit 350 --out parts
+node file-transfer.js files unpack --parts parts --dest D:/docs
 ```
 
-### Git History — Transfer specific commits
+## Commands
 
-Create `transfer.json` manually:
+| Command | What it does | Flags |
+| ------- | ------------ | ----- |
+| `git export` | Commits → part files | `--repo --mode all\|last\|unpushed\|hashes [--count N] [--hashes a,b] --limit 350 --out` |
+| `git restore` | Part files → repo (original authors, messages, timestamps) | `--parts --dest [--yes]` |
+| `git list` | List commits (oldest first) | `--repo --mode ... [--ids]` |
+| `git retime` | Re-date commits of an existing repo | `--repo [--last N] --start --end [--seed N] [--yes]` |
+| `files pack` | Folder → part files | `--src [--ignore a,b] --limit 350 --out` |
+| `files unpack` | Part files → folder | `--parts --dest [--overwrite]` |
+
+Sizes: a bare number is KB (`350`, `350kb`, `1.5mb`).
+
+## Size limit and splitting
+
+The limit applies to each finished part file (header + JSON + base64 included).
+Small commits/files are packed together. A commit or file that is too big on its own is
+**split automatically across several parts** and joined again on restore - no manual splitting.
+
+## Part files
+
+JSON with a small readable header and gzip + base64 data:
 
 ```json
-{
-  "repo": "C:/projects/my-app",
-  "commits": ["a1b2c3d", "d4e5f6a", "b7c8d9e"],
-  "options": { "threeway": true, "keepAuthor": true }
-}
+{ "format": "gt1", "kind": "git", "exportId": "218752119447", "seq": 3, "total": 7,
+  "sha256": "...", "encoding": "gzip+base64", "data": ["H4sIAAAA...", "..."] }
 ```
 
-```bash
-node git-history.js read transfer.json
-# Change "repo" to target repo path
-node git-history.js write transfer.json
-```
+- The file name is irrelevant; `exportId`, `seq` and `total` are inside the file.
+- Restore checks every part's checksum and tells you exactly which part is **missing**,
+  **cut off** or **changed** while copying - nothing is applied until all parts are valid.
+- BOM, CRLF line endings and extra whitespace from editors/pasting are tolerated.
+- If a folder holds parts from more than one export you are asked which one to use.
 
----
+## Git restore
 
-## Requirements
+- Applies each commit with `git apply --3way` + `git commit`, keeping the original author, committer,
+  message and **both timestamps**. Binary files, renames, CRLF and empty commits are handled.
+- Merge commits are skipped (and reported); history is restored as a straight line.
+- At the end the final tree hash is compared with the source: *identical* / *differs*.
+- **Existing repo**: must be clean; a backup ref `refs/gt/backup-<time>` is created first
+  (undo with `git reset --hard <ref>`).
+- **Conflict**: it stops, leaves the repo clean and saves progress in `.git/gt-restore-state.json`.
+  Run Restore again to **retry** or **skip** that commit and continue.
 
-- **Node.js** — v12+
-- **Git** — required only for git-history.js
+## Change timestamps (`git retime`)
 
----
+Re-dates commits of an existing repo: strictly increasing, first commit = start, last commit = end,
+every gap random between **5 minutes and 1 day**. The plan is calculated first and shown for confirmation.
 
-## Git Utility
+- Format `YYYY-MM-DD hh:mm:ss`; the time may be partial (`2026-11-10` = `00:00:00`, `2026-11-10 11:30` = `11:30:00`).
+  Local time zone.
+- If the range cannot hold the commits (needs `(N-1) × 5 min ≤ end − start ≤ (N-1) × 1 day`) it aborts and
+  prints the valid end range for your start.
+- `--seed N` reproduces the same plan. `--last N` re-dates only the newest N commits.
+- Rewrites history (new hashes) - do not use on commits already pushed and shared.
+  A backup ref is created; other branches/tags are not moved. Linear history only.
 
-Interactive, menu-driven tool. No config file, no `init` — just run it. Works on Windows/Linux/Mac.
-
-```bash
-node git-utility.js
-```
-
-1. Enter a git repo path (Windows `C:\...` or Linux `/...`). Validated as an existing git repo; re-prompts until valid (`q` to quit).
-2. Pick a menu option (menu loops until you quit):
-
-| Option | Description |
-| ------ | ----------- |
-| `1` | All commits — **detailed** (short hash, subject, author, time), reverse order (oldest first) |
-| `2` | All commits — **minimal** (full commit ids only), reverse order |
-| `3` | Not-pushed commits — **detailed** (`git log --branches --not --remotes`) |
-| `4` | Not-pushed commits — **minimal** (ids only) |
-| `5` | Group commits by size |
-| `q` | Quit |
-
-### Group by size
-
-Asks for:
-
-- **Commit source** — all / last N / specific hashes / unpushed
-- **Size limit** — in KB (a bare number like `300` means 300 KB; `300kb`, `1.5mb` also accepted)
-
-Commits are packed in order into groups so each group stays within the limit. A single commit whose change is larger than the limit becomes its own group (flagged `⚠`), since one commit cannot be split.
-
-Each commit's size = diff/patch bytes + binary blob sizes. All sizes shown in KB.
-
-Example output for `limit = 300kb`, commits `[1a, 2b, 3c, 4d]` sized `250 / 50 / 220 / 100` KB:
-
-```json
-{
-  "limit": "300.0 KB",
-  "limitBytes": 307200,
-  "commits": ["1a", "2b", "3c", "4d"],
-  "groups": [
-    ["1a"],
-    ["2b", "3c"],
-    ["4d"]
-  ]
-}
-```
-
-Optionally saves the result JSON to a file.
-
----
-
-## Splitter
-
-Interactive tool to split a text file into size-limited parts, or combine parts back together. Works on Windows/Linux/Mac.
-
-```bash
-node splitter.js
-```
-
-On launch, pick a mode:
-
-| Option | Description |
-| ------ | ----------- |
-| `1` | **Split** — split a file into size-limited parts |
-| `2` | **Combine** — join multiple files into one |
-| `q` | Quit |
-
-### Split
-
-1. Enter a file path (Windows `C:\...` or Linux `/...`). Validated as an existing file.
-2. Enter a max size per part in KB (a bare number like `300` means 300 KB; `300kb`, `1.5mb` also accepted).
-
-The file is read as UTF-8 text and split into parts of at most the given size, written next to the source as `name-1.ext`, `name-2.ext`, ...
-
-- Splits on character boundaries, so multi-byte (UTF-8) characters are never cut in half.
-- Concatenating the parts reproduces the original file exactly.
-- If the file is already within the limit, nothing is split.
-
-Example — `1.json` is 1000 KB, size limit `300`:
+## Layout
 
 ```text
-1-1.json  300 KB
-1-2.json  300 KB
-1-3.json  300 KB
-1-4.json  100 KB
+file-transfer.js       entry point (menu + direct commands)
+lib/                   prompt, args, size, paths, proc (git runner), packer, assemble
+git/                   export, restore, retime, list, select, repo, timestamps
+files/                 pack, unpack, ignore
 ```
 
-### Combine
+## Not included
 
-1. Enter the files to combine, comma-separated, **in order** (e.g. `1-1.json, 1-2.json, 1-3.json, 1-4.json`).
-2. Enter the output file path.
-
-Each file is read as UTF-8 text and concatenated in the given order into the output file. Combining the parts produced by Split reproduces the original file exactly.
-
-```bash
-# combine the parts back into one file
-node splitter.js
-# → 2 (Combine)
-# → 1-1.json, 1-2.json, 1-3.json, 1-4.json
-# → 1.json
-```
+- Empty folders are not carried by `files pack` (only files).
+- Branches, tags and merge commits are not transferred - only a linear commit sequence.
+- Whole export is built in memory; fine for normal repos/folders, not for multi-GB data.
