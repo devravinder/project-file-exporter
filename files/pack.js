@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { option } = require("../lib/args");
 const { parseSize, formatSize } = require("../lib/size");
-const { resolvePath, isDirectory, toLinuxPath } = require("../lib/paths");
+const { resolvePath, isDirectory, toLinuxPath, DEFAULT_DIR } = require("../lib/paths");
 const { packEntries, writeParts } = require("../lib/packer");
 const { prepareOutDir } = require("../lib/assemble");
 const { compileIgnore } = require("./ignore");
@@ -48,7 +48,7 @@ async function run(flags) {
   });
   const ignore = ignoreText.toLowerCase() === "none" ? [] : ignoreText.split(",");
   const limit = await option(flags, "limit", "📏 Max size per part file (KB)", { def: "350", parse: parseSize });
-  const outDir = await option(flags, "out", "💾 Output folder", { def: "transfer-out", parse: resolvePath });
+  const outDir = await option(flags, "out", "💾 Output folder", { def: DEFAULT_DIR, parse: resolvePath });
 
   await prepareOutDir(outDir, flags);
 

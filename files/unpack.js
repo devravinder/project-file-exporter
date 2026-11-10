@@ -5,7 +5,7 @@ const path = require("path");
 const prompt = require("../lib/prompt");
 const { option, confirm } = require("../lib/args");
 const { formatSize } = require("../lib/size");
-const { resolvePath, isDirectory, toLinuxPath } = require("../lib/paths");
+const { resolvePath, isDirectory, toLinuxPath, DEFAULT_DIR } = require("../lib/paths");
 const { loadParts } = require("../lib/assemble");
 
 // Reject paths that could escape the destination (absolute, "..", drive letters).
@@ -20,6 +20,7 @@ function safeTarget(dest, rel) {
 
 async function run(flags) {
   const partsDir = await option(flags, "parts", "📥 Folder with the part files", {
+    def: DEFAULT_DIR,
     parse: (v) => {
       const d = resolvePath(v);
       if (!isDirectory(d)) throw new Error(`Not a folder: ${d}`);

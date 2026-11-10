@@ -4,7 +4,7 @@ const path = require("path");
 const { option } = require("../lib/args");
 const { gitRaw } = require("../lib/proc");
 const { parseSize, formatSize } = require("../lib/size");
-const { resolvePath, toLinuxPath } = require("../lib/paths");
+const { resolvePath, toLinuxPath, DEFAULT_DIR } = require("../lib/paths");
 const { packEntries, writeParts } = require("../lib/packer");
 const { prepareOutDir } = require("../lib/assemble");
 const { parseRepoDir, readCommit, subject, shortHash } = require("./repo");
@@ -28,7 +28,7 @@ async function run(flags) {
   if (hashes.length === 0) throw new Error("No commits selected.");
   const limit = await option(flags, "limit", "📏 Max size per part file (KB)", { def: "350", parse: parseSize });
   const outDir = await option(flags, "out", "💾 Output folder", {
-    def: "transfer-out",
+    def: DEFAULT_DIR,
     parse: resolvePath,
   });
 

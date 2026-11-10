@@ -18,7 +18,8 @@ Everything can also be run directly with flags; anything not given is asked.
 ## Typical flow
 
 **Source machine** - `Git → Export`: pick the repo, which commits, the size limit (default 350 KB)
-and an output folder. You get `0001-of-0007.json`, `0002-of-0007.json`, ...
+and an output folder. You get `1.json`, `2.json`, `3_1.json`, `3_2.json`, `4.json`, ... (default folder `out`; a commit/file too big
+for one part is split into `N_1`, `N_2`, ...; numbers are zero-padded once there are more than 9 / 99 files).
 
 **Destination machine** - copy the part files over (open each, select all, copy, paste into a new file -
 the file *names* do not matter), then `Git → Restore`: pick the folder with the parts and the

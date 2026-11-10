@@ -6,7 +6,7 @@ const prompt = require("../lib/prompt");
 const { option, confirm } = require("../lib/args");
 const { git, gitOut } = require("../lib/proc");
 const { formatSize } = require("../lib/size");
-const { resolvePath, isDirectory, isEmptyDir, samePath, toLinuxPath } = require("../lib/paths");
+const { resolvePath, isDirectory, isEmptyDir, samePath, toLinuxPath, DEFAULT_DIR } = require("../lib/paths");
 const { loadParts } = require("../lib/assemble");
 const { shortHash, subject, currentHead, isClean } = require("./repo");
 
@@ -95,6 +95,7 @@ function applyCommit(cwd, c, hadHead) {
 
 async function run(flags) {
   const partsDir = await option(flags, "parts", "📥 Folder with the part files", {
+    def: DEFAULT_DIR,
     parse: (v) => {
       const d = resolvePath(v);
       if (!isDirectory(d)) throw new Error(`Not a folder: ${d}`);
